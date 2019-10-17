@@ -115,14 +115,14 @@ object Preprocessor {
   def cleanCountry(country: String, currency: String): String = {
     if (country == "False")
       currency
-    else if (country.length != 2)
+    else if (country != null && country.length != 2)
       null
     else
       country
   }
 
   def cleanCurrency(currency: String): String = {
-    if (currency.length != 3)
+    if (currency != null && currency.length != 3)
       null
     else
       currency
