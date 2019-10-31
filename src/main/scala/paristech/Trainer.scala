@@ -1,7 +1,9 @@
 package paristech
 
 import org.apache.spark.SparkConf
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, IDF, OneHotEncoderEstimator, RegexTokenizer, StopWordsRemover, StringIndexer, VectorAssembler}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -75,12 +77,13 @@ object Trainer {
     //    dataWords.select("words").show(false)
 
     // Stage 3 : computer la partie TF
-    val cvModel: CountVectorizerModel = new CountVectorizer()
+    val cv = new CountVectorizer()
       .setInputCol("words")
       .setOutputCol("TF")
-      .setVocabSize(3)
+      .setVocabSize(20)
       .setMinDF(2)
-      .fit(dataWords)
+    val cvModel: CountVectorizerModel = cv.fit(dataWords)
+
 
     val dataTF = cvModel.transform(dataWords)
     //    dataTF.select("TF").show(false)
@@ -122,28 +125,34 @@ object Trainer {
     val dataAssembled = assembler.transform(dataOneHot)
     //    dataAssembled.select("tfidf", "days_campaign", "hours_prepa", "goal", "country_onehot", "currency_onehot", "features").show()
     //    dataAssembled.select("features").show(false)
-    dataAssembled.select("features", "final_status").show(false)
+    //    dataAssembled.select("features", "final_status").show(false)
 
     val lr = new LogisticRegression()
       .setElasticNetParam(0.0) // 设置ElasticNet混合参数,范围为[0，1]。// 对于α= 0，惩罚是L2惩罚。 对于alpha = 1，它是一个L1惩罚。 对于0 <α<1，惩罚是L1和L2的组合。 默认值为0.0，这是一个L2惩罚。
       .setFitIntercept(true)
       .setFeaturesCol("features")
       .setLabelCol("final_status")
-      .setStandardization(true)
+      .setStandardization(true) // 在拟合模型之前,是否标准化特征
       .setPredictionCol("predictions")
-      .setRawPredictionCol("raw_prediction") // 在拟合模型之前,是否标准化特征
+      .setRawPredictionCol("raw_prediction")
       .setThresholds(Array(0.7, 0.3)) // 在二进制分类中设置阈值，范围为[0，1]。如果类标签1的估计概率>Threshold，则预测1，否则0.高阈值鼓励模型更频繁地预测0; 低阈值鼓励模型更频繁地预测1。默认值为0.5。
       .setTol(1.0e-6) // 设置迭代的收敛容限。 较小的值将导致更高的精度与更多的迭代的成本。 默认值为1E-6。
       .setMaxIter(20)
 
-    val Array(train, test) = dataAssembled.randomSplit(Array(0.9, 0.1))
-//    println(train.count())
-//    println(test.count())
+    // Pipeline
+    val pileline = new Pipeline().setStages(
+      Array(tokenizer, stopWordsRemover, cv, idf, countryIndexer, currencyIndexer, encoder, assembler, lr))
 
-    val lrModel = lr.fit(train)
+    val Array(train, test) = data.randomSplit(Array(0.9, 0.1))
 
-    println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
+    val pipelineModel = pileline.fit(train)
+    val dfWithSimplePredictions = pipelineModel.transform(test)
 
-
+    val f1score = new MulticlassClassificationEvaluator()
+      .setMetricName("f1")
+      .setPredictionCol("predictions")
+      .setLabelCol("final_status")
+    pipelineModel.transform(test).select("final_status", "features", "raw_prediction", "probability", "predictions").show()
+    println(f1score.evaluate(dfWithSimplePredictions))
   }
 }

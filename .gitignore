@@ -20,3 +20,4 @@ project/plugins/project/
 # spark
 metastore_db/
 data/
+/src/main/scala/paristech/Example/
