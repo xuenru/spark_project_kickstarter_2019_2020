@@ -5,6 +5,7 @@ import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, IDF, OneHotEncoderEstimator, RegexTokenizer, StopWordsRemover, StringIndexer, VectorAssembler}
+import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 
@@ -140,12 +141,12 @@ object Trainer {
       .setMaxIter(20)
 
     // Pipeline
-    val pileline = new Pipeline().setStages(
+    val pipeline = new Pipeline().setStages(
       Array(tokenizer, stopWordsRemover, cv, idf, countryIndexer, currencyIndexer, encoder, assembler, lr))
 
     val Array(train, test) = data.randomSplit(Array(0.9, 0.1))
 
-    val pipelineModel = pileline.fit(train)
+    val pipelineModel = pipeline.fit(train)
     val dfWithSimplePredictions = pipelineModel.transform(test)
 
     val f1score = new MulticlassClassificationEvaluator()
@@ -153,6 +154,28 @@ object Trainer {
       .setPredictionCol("predictions")
       .setLabelCol("final_status")
     pipelineModel.transform(test).select("final_status", "features", "raw_prediction", "probability", "predictions").show()
-    println(f1score.evaluate(dfWithSimplePredictions))
+    println("f1score： " + f1score.evaluate(dfWithSimplePredictions))
+
+    // Réglage des hyper-paramètres (a.k.a. tuning) du modèle
+    val paramGrid = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(10e-8, 10e-6, 10e-4, 10e-2))
+      .addGrid(cv.minDF, Array(55.0, 75.0, 95.0))
+      //      .addGrid(cv.vocabSize, Array(3, 10, 20, 30, 40))
+      .build()
+
+    val trainValidationSplit = new TrainValidationSplit()
+      .setEstimator(pipeline)
+      .setEstimatorParamMaps(paramGrid)
+      .setTrainRatio(0.7)
+      .setEvaluator(f1score)
+    val model = trainValidationSplit.fit(train)
+
+    val dfWithPredictions2 = model.transform(test)
+
+    dfWithPredictions2.select("final_status", "features", "raw_prediction", "probability", "predictions").show()
+    dfWithPredictions2.groupBy("final_status", "predictions").count.show()
+    // print f1score
+    println("f1score： " + model.getEvaluator.evaluate(dfWithPredictions2))
+
   }
 }
