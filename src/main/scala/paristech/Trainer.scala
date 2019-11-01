@@ -176,6 +176,9 @@ object Trainer {
     dfWithPredictions2.groupBy("final_status", "predictions").count.show()
     // print f1score
     println("f1score： " + model.getEvaluator.evaluate(dfWithPredictions2))
+    model.save("data/tp3_model")
+    //for loading model
+    //    val xModel = TrainValidationSplitModel.load("data/tp3_model")
 
   }
 }
