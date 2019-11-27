@@ -50,7 +50,7 @@ object Trainer {
     println("hello world ! from Trainer")
 
     // Charger le DataFrame obtenu à la fin du TP 2.
-    val dataRaw = spark.read.parquet("data/tp2_df_final.parquet")
+    val dataRaw = spark.read.parquet("src/main/resources/preprocessed.parquet")
     //    dataRaw.show()
     // clean the bad lines
     val data: DataFrame = dataRaw
@@ -176,7 +176,7 @@ object Trainer {
     dfWithPredictions2.groupBy("final_status", "predictions").count.show()
     // print f1score
     println("f1score： " + model.getEvaluator.evaluate(dfWithPredictions2))
-    model.save("data/tp3_model")
+    model.save("src/main/resources/trained_model")
     //for loading model
     //    val xModel = TrainValidationSplitModel.load("data/tp3_model")
 

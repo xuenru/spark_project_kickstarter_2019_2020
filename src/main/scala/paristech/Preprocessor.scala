@@ -109,7 +109,7 @@ object Preprocessor {
       .na.fill(Map("days_campaign" -> -1, "hours_prepa" -> -1, "goal" -> -1, "country2" -> "unknown", "currency2" -> "unknown"))
     dfFinal.show()
 
-    dfFinal.write.parquet("data/tp2_df_final.parquet")
+    dfFinal.write.mode("overwrite").parquet("src/main/resources/preprocessed.parquet")
   }
 
   def cleanCountry(country: String, currency: String): String = {
