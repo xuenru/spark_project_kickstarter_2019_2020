@@ -46,11 +46,13 @@ object Preprocessor {
     println("Hello World ! from Preprocessor")
     println("\n")
 
-    val df: DataFrame = spark.read.option("header", true).option("inferSchema", true).csv("data/train_clean.csv")
+    val df: DataFrame = spark.read.option("header", true).option("inferSchema", true).csv("src/main/resources/train_clean.csv")
     println(s"Nombre de linges : ${df.count}")
     println(s"Nombre de colonnes : ${df.columns.length}")
 
+    println("Affichez un extrait du DataFrame sous forme de tableau :")
     df.show()
+    println("Affichez le schéma du DataFrame, à savoir le nom de chaque colonne avec son type :")
     df.printSchema()
 
     val dfCasted: DataFrame = df
@@ -62,8 +64,10 @@ object Preprocessor {
       .withColumn("backers_count", $"backers_count".cast("Int"))
       .withColumn("final_status", $"final_status".cast("Int"))
 
+    println("le schéma après assigner le type Int aux colonnes")
     dfCasted.printSchema()
 
+    println("Affichez une description statistique")
     dfCasted
       .select("goal", "backers_count", "final_status")
       .describe()
@@ -73,13 +77,14 @@ object Preprocessor {
       .groupBy("country")
       .count()
       .orderBy($"count".desc)
-      .show(10)
+      .show()
 
     dfCasted
       .select("deadline")
       .dropDuplicates()
       .show()
 
+    // Enlevez la colonne disable_communication
     val df2: DataFrame = dfCasted.drop("disable_communication")
     df2.printSchema()
 
@@ -92,6 +97,7 @@ object Preprocessor {
       .orderBy($"count".desc)
       .show(50)
 
+    // use user defined function
     val cleanCountryUdf = udf(cleanCountry _)
     val cleanCurrencyUdf = udf(cleanCurrency _)
     val dfCountry: DataFrame = dfNoFuture
@@ -102,16 +108,28 @@ object Preprocessor {
     dfCountry.show()
 
     val dfFinal: DataFrame = dfCountry
+      // calculate the number of days from `launched_at` to `deadline`
       .withColumn("days_campaign", datediff(from_unixtime($"deadline"), from_unixtime($"launched_at")))
+      // calculate the number of hours from `created_at` to `launched_at`
       .withColumn("hours_prepa", round(second(from_unixtime($"launched_at" - $"created_at")) / 3600, 3))
       .drop("created_at", "deadline", "launched_at")
+      // Concatenates multiple input string columns together into a single string column
       .withColumn("text", lower(concat_ws(" ", $"name", $"desc", $"keywords")))
       .na.fill(Map("days_campaign" -> -1, "hours_prepa" -> -1, "goal" -> -1, "country2" -> "unknown", "currency2" -> "unknown"))
+
+    println("DataFrame version finale:")
     dfFinal.show()
 
     dfFinal.write.mode("overwrite").parquet("src/main/resources/preprocessed.parquet")
   }
 
+  /**
+    * user defined function : clean Country
+    *
+    * @param country  String
+    * @param currency String
+    * @return
+    */
   def cleanCountry(country: String, currency: String): String = {
     if (country == "False")
       currency
@@ -121,6 +139,12 @@ object Preprocessor {
       country
   }
 
+  /**
+    * user defined function : clean Currency
+    *
+    * @param currency String
+    * @return
+    */
   def cleanCurrency(currency: String): String = {
     if (currency != null && currency.length != 3)
       null
