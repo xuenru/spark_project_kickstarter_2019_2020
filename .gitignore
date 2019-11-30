@@ -19,3 +19,7 @@ project/plugins/project/
 
 # spark
 metastore_db/
+data/
+/src/main/scala/paristech/Example/
+src/main/resources/*
+!src/main/resources/train_clean.csv

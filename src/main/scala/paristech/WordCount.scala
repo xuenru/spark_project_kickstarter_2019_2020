@@ -41,7 +41,7 @@ object WordCount {
       */
 
     // utilisez votre path
-    val filepath: String = "/Users/flo/Documents/packages/spark-2.3.4-bin-hadoop2.7/README.md"
+    val filepath: String = sys.env("SPARK_HOME") + "/README.md"
 
     val rdd: RDD[String] = sc.textFile(filepath)
 
@@ -114,7 +114,6 @@ object WordCount {
       * - les types assurent la consistence des données
       * - les noms de variables permettent de comprendre le code plus facilement
       */
-
     val dfWordCount: DataFrame = sc.textFile(filepath)
       .flatMap { case (line: String) => line.split(" ") }
       .map { case (word: String) => (word, 1) }
