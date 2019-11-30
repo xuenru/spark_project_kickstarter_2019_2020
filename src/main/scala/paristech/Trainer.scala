@@ -67,7 +67,7 @@ object Trainer {
       .setInputCol("text")
       .setOutputCol("tokens")
     val dataTokens = tokenizer.transform(data)
-    //    dataTokens.select("tokens").show()
+    // dataTokens.select("text", "tokens").show()
 
     // Stage 2 : retirer les stop words
     val stopWordsRemover = new StopWordsRemover()
@@ -75,7 +75,7 @@ object Trainer {
       .setOutputCol("words")
 
     val dataWords = stopWordsRemover.transform(dataTokens)
-    //    dataWords.select("words").show(false)
+    // dataWords.select("words").show(false)
 
     // Stage 3 : computer la partie TF
     val cv = new CountVectorizer()
@@ -84,8 +84,6 @@ object Trainer {
       .setVocabSize(20)
       .setMinDF(2)
     val cvModel: CountVectorizerModel = cv.fit(dataWords)
-
-
     val dataTF = cvModel.transform(dataWords)
     //    dataTF.select("TF").show(false)
 
@@ -98,6 +96,7 @@ object Trainer {
     val dataTFIDF = idfModel.transform(dataTF)
     //    dataTFIDF.select("tfidf").show(false)
 
+    // A label indexer that maps a string column of labels to an ML column of label indices.
     val countryIndexer = new StringIndexer()
       .setInputCol("country2")
       .setOutputCol("country_indexed")
@@ -116,8 +115,7 @@ object Trainer {
       .setInputCols(Array("country_indexed", "currency_indexed"))
       .setOutputCols(Array("country_onehot", "currency_onehot"))
     val dataOneHot = encoder.fit(DataCCIndexed).transform(DataCCIndexed)
-    //    dataOneHot.select("country_indexed", "currency_indexed", "country_onehot", "currency_onehot").show()
-
+    //        dataOneHot.select("country_indexed", "currency_indexed", "country_onehot", "currency_onehot").show()
 
     val assembler = new VectorAssembler()
       .setInputCols(Array("tfidf", "days_campaign", "hours_prepa", "goal", "country_onehot", "currency_onehot"))
@@ -129,15 +127,16 @@ object Trainer {
     //    dataAssembled.select("features", "final_status").show(false)
 
     val lr = new LogisticRegression()
-      .setElasticNetParam(0.0) // 设置ElasticNet混合参数,范围为[0，1]。// 对于α= 0，惩罚是L2惩罚。 对于alpha = 1，它是一个L1惩罚。 对于0 <α<1，惩罚是L1和L2的组合。 默认值为0.0，这是一个L2惩罚。
+      .setElasticNetParam(0.0) // set ElasticNet, value [0, 1], 0=> L2(default), 1=> L1
       .setFitIntercept(true)
       .setFeaturesCol("features")
       .setLabelCol("final_status")
-      .setStandardization(true) // 在拟合模型之前,是否标准化特征
+      .setStandardization(true) // before fit if do Standardization
       .setPredictionCol("predictions")
       .setRawPredictionCol("raw_prediction")
-      .setThresholds(Array(0.7, 0.3)) // 在二进制分类中设置阈值，范围为[0，1]。如果类标签1的估计概率>Threshold，则预测1，否则0.高阈值鼓励模型更频繁地预测0; 低阈值鼓励模型更频繁地预测1。默认值为0.5。
-      .setTol(1.0e-6) // 设置迭代的收敛容限。 较小的值将导致更高的精度与更多的迭代的成本。 默认值为1E-6。
+      .setThresholds(Array(0.7, 0.3)) // default 0.5, [0，1]. if value > Threshold then result = 1
+      //      .setThreshold(0.3) // some as function above
+      .setTol(1.0e-6) // like epsilon default 1E-6
       .setMaxIter(20)
 
     // Pipeline
@@ -149,6 +148,7 @@ object Trainer {
     val pipelineModel = pipeline.fit(train)
     val dfWithSimplePredictions = pipelineModel.transform(test)
 
+    // f1score = 2 * (precision*recall) / (precision+recall)
     val f1score = new MulticlassClassificationEvaluator()
       .setMetricName("f1")
       .setPredictionCol("predictions")
@@ -160,7 +160,7 @@ object Trainer {
     val paramGrid = new ParamGridBuilder()
       .addGrid(lr.regParam, Array(10e-8, 10e-6, 10e-4, 10e-2))
       .addGrid(cv.minDF, Array(55.0, 75.0, 95.0))
-      //      .addGrid(cv.vocabSize, Array(3, 10, 20, 30, 40))
+      .addGrid(cv.vocabSize, Array(3, 10, 20, 30, 40))
       .build()
 
     val trainValidationSplit = new TrainValidationSplit()
@@ -170,12 +170,12 @@ object Trainer {
       .setEvaluator(f1score)
     val model = trainValidationSplit.fit(train)
 
-    val dfWithPredictions2 = model.transform(test)
+    val dfWithPredictions = model.transform(test)
 
-    dfWithPredictions2.select("final_status", "features", "raw_prediction", "probability", "predictions").show()
-    dfWithPredictions2.groupBy("final_status", "predictions").count.show()
+    dfWithPredictions.select("final_status", "features", "raw_prediction", "probability", "predictions").show()
+    dfWithPredictions.groupBy("final_status", "predictions").count.show()
     // print f1score
-    println("f1score： " + model.getEvaluator.evaluate(dfWithPredictions2))
+    println("f1score： " + model.getEvaluator.evaluate(dfWithPredictions))
     model.save("src/main/resources/trained_model")
     //for loading model
     //    val xModel = TrainValidationSplitModel.load("data/tp3_model")
